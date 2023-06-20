@@ -4,13 +4,12 @@ import random
 import time
 import os
 from dotenv import load_dotenv
+from config import OPENAI_MODEL_ENGINE
 
 load_dotenv()
 
 
 openai.api_key = os.getenv("openai_api_key")
-
-model_engine = "gpt-3.5-turbo"
 
 
 def user(user_message, history):
@@ -21,7 +20,7 @@ def bot(history):
     message = history[-1][0]
 
     completion = openai.ChatCompletion.create(
-        model=model_engine,
+        model=OPENAI_MODEL_ENGINE,
         messages=[
             {
                 "role": "system",
