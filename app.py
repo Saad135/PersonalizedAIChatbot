@@ -13,7 +13,7 @@ openai.api_key = os.getenv("openai_api_key")
 
 
 def user(user_message, history):
-    return "", history + [[user_message, None]]
+    return gr.update(value="", interactive=False), history + [[user_message, None]]
 
 
 def bot(history):
@@ -52,12 +52,14 @@ def bot(history):
 
 with gr.Blocks() as demo:
     msg = gr.Textbox()
-    clear = gr.Button("Clear")
     chatbot = gr.Chatbot()
+    clear = gr.Button("Clear")
 
-    msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
+    response = msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
         bot, chatbot, chatbot
     )
+    response.then(lambda: gr.update(interactive=True), None, [msg], queue=False)
+
     clear.click(lambda: None, None, chatbot, queue=False)
 
 
