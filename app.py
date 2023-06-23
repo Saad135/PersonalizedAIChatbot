@@ -16,7 +16,7 @@ def user(user_message, history):
     return gr.update(value="", interactive=False), history + [[user_message, None]]
 
 
-def bot(history):
+def bot(mood, history):
     message = history[-1][0]
 
     completion = openai.ChatCompletion.create(
@@ -24,7 +24,7 @@ def bot(history):
         messages=[
             {
                 "role": "system",
-                "content": "You are a helpful assistant.",
+                "content": f"You are a helpful assistant who is very {mood}.",
             },
             {
                 "role": "user",
@@ -51,12 +51,17 @@ def bot(history):
 
 
 with gr.Blocks() as demo:
+    mood = gr.Dropdown(
+        ["cheerful", "pessimistic", "optimistic"],
+        label="Bot Mood",
+        info="Select the mood for the bot",
+    )
     msg = gr.Textbox()
     chatbot = gr.Chatbot()
     clear = gr.Button("Clear")
 
     response = msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
-        bot, chatbot, chatbot
+        bot, [mood, chatbot], chatbot
     )
     response.then(lambda: gr.update(interactive=True), None, [msg], queue=False)
 
