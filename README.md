@@ -9,6 +9,8 @@ app_file: app.py
 pinned: false
 ---
 
+# Personalized AI Chatbot
+
 An entertainment-focused AI chatbot with customizable personalities that can reference information from a specified YouTube playlist or channel.
 
 ## Work in progress
@@ -23,5 +25,3 @@ An entertainment-focused AI chatbot with customizable personalities that can ref
 - run the app using `python app.py`
 
 Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
-
-# Personalized AI Chatbot
