@@ -3,6 +3,11 @@ import gradio as gr
 import random
 import time
 import os
+
+
+import numpy as np
+from gradio_client import Client
+from elevenlabs import voices, generate, set_api_key, UnauthenticatedRateLimitError
 from dotenv import load_dotenv
 from config import OPENAI_MODEL_ENGINE
 
@@ -56,6 +61,7 @@ with gr.Blocks() as demo:
         label="Bot Mood",
         info="Select the mood for the bot",
     )
+    record = gr.Audio(source="microphone", type="filepath")
     msg = gr.Textbox()
     chatbot = gr.Chatbot()
     clear = gr.Button("Clear")
