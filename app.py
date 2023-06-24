@@ -56,23 +56,72 @@ def bot(mood, history):
         yield history
 
 
+# Reference: https://github.com/gradio-app/gradio/discussions/3921#discussioncomment-5738136
+def transcribe(audio):
+    client = Client("abidlabs/whisper")
+    text = client.predict(audio, api_name="/predict")
+    return gr.update(value=text, interactive=True)
+
+
+# Reference: https://huggingface.co/spaces/elevenlabs/tts/blob/main/app.py
+def pad_buffer(audio):
+    # Pad buffer to multiple of 2 bytes
+    buffer_size = len(audio)
+    element_size = np.dtype(np.int16).itemsize
+    if buffer_size % element_size != 0:
+        audio = audio + b"\0" * (element_size - (buffer_size % element_size))
+    return audio
+
+
+def generate_voice(history):
+    text = history[-1][1]
+    try:
+        audio = generate(
+            text,  # Limit to 250 characters
+            voice="Arnold",
+            model="eleven_monolingual_v1",
+        )
+        return (44100, np.frombuffer(pad_buffer(audio), dtype=np.int16))
+    except UnauthenticatedRateLimitError as e:
+        raise gr.Error(
+            "Thanks for trying out ElevenLabs TTS! You've reached the free tier limit. Please provide an API key to continue."
+        )
+    except Exception as e:
+        raise gr.Error(e)
+
+
+# With microphone streaming
 with gr.Blocks() as demo:
     mood = gr.Dropdown(
         ["cheerful", "pessimistic", "optimistic"],
         label="Bot Mood",
         info="Select the mood for the bot",
     )
-    record = gr.Audio(source="microphone", type="filepath")
+
+    with gr.Row():
+        with gr.Column(scale=3):
+            record = gr.Audio(source="microphone", type="filepath")
+        with gr.Column(scale=1):
+            transcribe_btn = gr.Button("Submit Audio")
+
     msg = gr.Textbox()
     chatbot = gr.Chatbot()
+    bot_tts = gr.Audio()
     clear = gr.Button("Clear")
+
+    transcribe_btn.click(fn=transcribe, inputs=record, outputs=msg).then(
+        lambda: gr.update(interactive=True), None, [msg], queue=False
+    )
 
     response = msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
         bot, [mood, chatbot], chatbot
     )
+    response.then(generate_voice, chatbot, bot_tts, queue=False)
     response.then(lambda: gr.update(interactive=True), None, [msg], queue=False)
 
-    clear.click(lambda: None, None, chatbot, queue=False)
+    clear.click(
+        lambda: [None, None, None], None, [record, chatbot, bot_tts], queue=False
+    )
 
 
 demo.queue()
