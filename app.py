@@ -15,6 +15,7 @@ load_dotenv()
 
 
 openai.api_key = os.getenv("openai_api_key")
+set_api_key(os.getenv("eleven_api_key"))
 
 
 def user(user_message, history):
