@@ -6,10 +6,12 @@ import os
 
 
 import numpy as np
+import pandas as pd
 from gradio_client import Client
 from elevenlabs import voices, generate, set_api_key, UnauthenticatedRateLimitError
 from dotenv import load_dotenv
-from config import OPENAI_MODEL_ENGINE
+from config import CONTEXT_DF_FILE, CONTEXT_EMBED_FILE, OPENAI_MODEL_ENGINE
+from utils import construct_prompt, load_embeddings
 
 load_dotenv()
 
@@ -17,24 +19,32 @@ load_dotenv()
 openai.api_key = os.getenv("openai_api_key")
 set_api_key(os.getenv("eleven_api_key"))
 
+final_df = pd.read_csv(CONTEXT_DF_FILE)
+final_df = final_df.set_index(["source", "timestamp"])
+
+loaded_embeds = load_embeddings(CONTEXT_EMBED_FILE)
+
 
 def user(user_message, history):
     return gr.update(value="", interactive=False), history + [[user_message, None]]
 
 
 def bot(mood, history):
+    header = f"""Answer the question in a {mood} way as truthfully as possible using the provided context, and if the answer is not contained within the text below, say "I don't know."\n\nContext:\n"""
+
     message = history[-1][0]
+    prompt = construct_prompt(message, loaded_embeds, final_df)
 
     completion = openai.ChatCompletion.create(
         model=OPENAI_MODEL_ENGINE,
         messages=[
             {
                 "role": "system",
-                "content": f"You are a helpful assistant who is very {mood}.",
+                "content": header,
             },
             {
                 "role": "user",
-                "content": message,
+                "content": prompt,
             },
         ],
         max_tokens=1024,
@@ -90,20 +100,18 @@ def generate_voice(history):
         raise gr.Error(e)
 
 
-# With microphone streaming
+# With microphone not streaming
 with gr.Blocks() as demo:
     mood = gr.Dropdown(
         ["cheerful", "pessimistic", "optimistic"],
         label="Bot Mood",
         info="Select the mood for the bot",
     )
-
     with gr.Row():
         with gr.Column(scale=3):
             record = gr.Audio(source="microphone", type="filepath")
         with gr.Column(scale=1):
             transcribe_btn = gr.Button("Submit Audio")
-
     msg = gr.Textbox()
     chatbot = gr.Chatbot()
     bot_tts = gr.Audio()
