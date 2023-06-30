@@ -155,9 +155,9 @@ with gr.Blocks() as demo:
     response.then(lambda: gr.update(interactive=True), None, [msg], queue=False)
 
     clear.click(
-        lambda: [None, None, None, None],
+        lambda: [None, None, None, None, None],
         None,
-        [record, chatbot, bot_tts, playlist_id],
+        [record, chatbot, bot_tts, playlist_id, context_embeddings_state],
         queue=False,
     )
 
