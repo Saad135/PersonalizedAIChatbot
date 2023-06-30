@@ -11,7 +11,14 @@ from gradio_client import Client
 from elevenlabs import voices, generate, set_api_key, UnauthenticatedRateLimitError
 from dotenv import load_dotenv
 from config import CONTEXT_DF_FILE, CONTEXT_EMBED_FILE, OPENAI_MODEL_ENGINE
-from utils import construct_prompt, load_embeddings, pad_buffer
+from utils import (
+    construct_prompt,
+    get_channel_videos,
+    get_transcripts,
+    load_embeddings,
+    merge_transcripts,
+    pad_buffer,
+)
 
 load_dotenv()
 
@@ -29,11 +36,11 @@ def user(user_message, history):
     return gr.update(value="", interactive=False), history + [[user_message, None]]
 
 
-def bot(mood, history):
+def bot(mood, history, context_embeds):
     header = f"""Answer the question in a {mood} way as truthfully as possible using the provided context, and if the answer is not contained within the text below, say "I don't know."\n\nContext:\n"""
 
     message = history[-1][0]
-    prompt = construct_prompt(message, loaded_embeds, final_df)
+    prompt = construct_prompt(message, context_embeds)
 
     completion = openai.ChatCompletion.create(
         model=OPENAI_MODEL_ENGINE,
@@ -90,8 +97,43 @@ def generate_voice(history):
         raise gr.Error(e)
 
 
-# With microphone not streaming
+def convert_to_embeddings(playlist_id, num_vids, pr=gr.Progress()):
+    video_ids = get_channel_videos(playlist_id, num_vids)
+    transcripts = get_transcripts(video_ids, pr)
+    merged_transcripts = merge_transcripts(transcripts, pr)
+    return "Embeddings generated successfully", merged_transcripts
+
+
+# Without microphone streaming
 with gr.Blocks() as demo:
+    gr.Markdown(
+        """
+        ## Context from Youtube playlists
+        """
+    )
+    playlist_id = gr.Textbox(
+        label="Youtube playlist ID",
+        info="Videos will be fetched from the playlist with the provided it and their transcripts will be used as context.",
+    )
+    num_videos = gr.Number(
+        value=5,
+        label="No. of videos",
+        info="No. of videos whose transcripts will be fetched from the playlist",
+    )
+    convert_to_embeddings_btn = gr.Button("Convert")
+    context_embeddings_state = gr.State()
+
+    convert_to_embeddings_btn.click(
+        convert_to_embeddings,
+        [playlist_id, num_videos],
+        [playlist_id, context_embeddings_state],
+    )
+
+    gr.Markdown(
+        """
+        ## Bot Configuration
+        """
+    )
     mood = gr.Dropdown(
         ["cheerful", "pessimistic", "optimistic"],
         label="Bot Mood",
@@ -112,13 +154,16 @@ with gr.Blocks() as demo:
     )
 
     response = msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
-        bot, [mood, chatbot], chatbot
+        bot, [mood, chatbot, context_embeddings_state], chatbot
     )
     response.then(generate_voice, chatbot, bot_tts, queue=False)
     response.then(lambda: gr.update(interactive=True), None, [msg], queue=False)
 
     clear.click(
-        lambda: [None, None, None], None, [record, chatbot, bot_tts], queue=False
+        lambda: [None, None, None, None],
+        None,
+        [record, chatbot, bot_tts, playlist_id],
+        queue=False,
     )
 
 

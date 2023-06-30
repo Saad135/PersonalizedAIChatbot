@@ -1,8 +1,28 @@
 import openai
+import os
 import numpy as np
 import pandas as pd
 
-from config import MAX_SECTION_LEN, QUERY_EMBEDDINGS_MODEL, SEPARATOR, SEPARATOR_LEN
+import googleapiclient.discovery
+
+from youtube_transcript_api import YouTubeTranscriptApi
+from dotenv import load_dotenv
+
+from config import (
+    DOC_EMBEDDINGS_MODEL,
+    MAX_SECTION_LEN,
+    QUERY_EMBEDDINGS_MODEL,
+    SEPARATOR,
+    SEPARATOR_LEN,
+)
+
+load_dotenv()
+
+youtube = googleapiclient.discovery.build(
+    "youtube",
+    "v3",
+    developerKey=os.getenv("yt_api_key"),
+)
 
 
 def get_embedding(text: str, model: str):
@@ -12,6 +32,10 @@ def get_embedding(text: str, model: str):
 
 def get_query_embedding(text: str):
     return get_embedding(text, QUERY_EMBEDDINGS_MODEL)
+
+
+def get_doc_embedding(text: str):
+    return get_embedding(text, DOC_EMBEDDINGS_MODEL)
 
 
 def vector_similarity(x, y):
@@ -33,8 +57,8 @@ def order_document_sections_by_query_similarity(query: str, contexts):
 
     document_similarities = sorted(
         [
-            (vector_similarity(query_embedding, doc_embedding), doc_index)
-            for doc_index, doc_embedding in contexts.items()
+            (vector_similarity(query_embedding, context["embedding"]), context["text"])
+            for context in contexts
         ],
         reverse=True,
     )
@@ -42,7 +66,7 @@ def order_document_sections_by_query_similarity(query: str, contexts):
     return document_similarities
 
 
-def construct_prompt(question: str, context_embeddings: dict, df: pd.DataFrame) -> str:
+def construct_prompt(question, context_embeddings) -> str:
     """
     Fetch relevant
     """
@@ -54,26 +78,16 @@ def construct_prompt(question: str, context_embeddings: dict, df: pd.DataFrame) 
     chosen_sections_len = 0
     chosen_sections_indexes = []
 
-    for _, section_index in most_relevant_document_sections:
+    for _, section_text in most_relevant_document_sections:
         # Add contexts until we run out of space.
-        document_section = df.loc[section_index]
 
-        chosen_sections_len += len(document_section.text) + SEPARATOR_LEN
+        chosen_sections_len += len(section_text) + SEPARATOR_LEN
         if chosen_sections_len > MAX_SECTION_LEN:
             break
 
-        chosen_sections.append(SEPARATOR + document_section.text.replace("\n", " "))
-        chosen_sections_indexes.append(str(section_index))
+        chosen_sections.append(SEPARATOR + section_text)
+        # chosen_sections_indexes.append(str(section_index))
 
-    # Useful diagnostic information
-    print(f"Selected {len(chosen_sections)} document sections:")
-    print("\n".join(chosen_sections_indexes))
-
-    chosen_sections = [sections.to_list()[0] for sections in chosen_sections]
-
-    # header = f"""Answer the question as truthfully as possible using the provided context, and if the answer is not contained within the text below, say "I don't know."\n\nContext:\n"""
-
-    # return header + "".join(chosen_sections) + "\n\n Q: " + question + "\n A:"
     return "".join(chosen_sections) + "\n\n Q: " + question + "\n A:"
 
 
@@ -101,3 +115,82 @@ def pad_buffer(audio):
     if buffer_size % element_size != 0:
         audio = audio + b"\0" * (element_size - (buffer_size % element_size))
     return audio
+
+
+def get_channel_videos(playlist_id, num_vids):
+    video_ids = []
+    page_token = None
+
+    while True:
+        request = youtube.playlistItems().list(
+            part="contentDetails",
+            playlistId=playlist_id,
+            maxResults=50,  # Fetch 50 videos at a time
+            pageToken=page_token,  # Add pagination
+        )
+        response = request.execute()
+
+        num_vids = (
+            num_vids
+            if num_vids != None and num_vids < len(response["items"])
+            else len(response["items"])
+        )
+
+        video_ids += [
+            item["contentDetails"]["videoId"]
+            for item in response["items"][0 : int(num_vids)]
+            if item["kind"] == "youtube#playlistItem"
+        ]
+
+        # Check if there are more videos to fetch
+        if "nextPageToken" in response:
+            page_token = response["nextPageToken"]
+        else:
+            break
+
+    return video_ids
+
+
+def get_transcripts(video_ids, progress):
+    transcripts = {}
+    for video_id in progress.tqdm(video_ids, desc="Downloading transcripts"):
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            transcripts[video_id] = transcript
+        except Exception as ex:
+            print(f"An error occurred for video: {video_id} [{ex}]")
+    return transcripts
+
+
+def merge_transcripts(transcripts, progress):
+    def reset_merged_item():
+        return {"text": "", "start": None, "duration": 0.00}
+
+    merged_item = reset_merged_item()
+    merged_transcript = []
+    # all_transcripts = []
+
+    # embeddings = {}
+
+    for key in progress.tqdm(
+        transcripts.keys(), desc="Generating embeddings for every video"
+    ):
+        for item in progress.tqdm(
+            transcripts[key], desc="Generating embedding for every chunk"
+        ):
+            merged_item["source"] = (key, item["start"])
+            merged_item["text"] += item["text"].replace("\n", " ")
+            merged_item["start"] = (
+                item["start"] if merged_item["start"] != None else None
+            )
+            merged_item["duration"] += item["duration"]
+
+            if merged_item["duration"] > 30.00:
+                merged_item["embedding"] = get_doc_embedding(merged_item["text"])
+                merged_transcript += [merged_item]
+                merged_item = reset_merged_item()
+
+        # all_transcripts += [merged_transcript]
+        # merged_transcript = []
+
+    return merged_transcript
