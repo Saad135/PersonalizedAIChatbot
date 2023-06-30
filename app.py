@@ -26,11 +26,6 @@ load_dotenv()
 openai.api_key = os.getenv("openai_api_key")
 set_api_key(os.getenv("eleven_api_key"))
 
-final_df = pd.read_csv(CONTEXT_DF_FILE)
-final_df = final_df.set_index(["source", "timestamp"])
-
-loaded_embeds = load_embeddings(CONTEXT_EMBED_FILE)
-
 
 def user(user_message, history):
     return gr.update(value="", interactive=False), history + [[user_message, None]]
