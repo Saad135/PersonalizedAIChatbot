@@ -11,7 +11,7 @@ from gradio_client import Client
 from elevenlabs import voices, generate, set_api_key, UnauthenticatedRateLimitError
 from dotenv import load_dotenv
 from config import CONTEXT_DF_FILE, CONTEXT_EMBED_FILE, OPENAI_MODEL_ENGINE
-from utils import construct_prompt, load_embeddings
+from utils import construct_prompt, load_embeddings, pad_buffer
 
 load_dotenv()
 
@@ -71,16 +71,6 @@ def transcribe(audio):
     client = Client("abidlabs/whisper")
     text = client.predict(audio, api_name="/predict")
     return gr.update(value=text, interactive=True)
-
-
-# Reference: https://huggingface.co/spaces/elevenlabs/tts/blob/main/app.py
-def pad_buffer(audio):
-    # Pad buffer to multiple of 2 bytes
-    buffer_size = len(audio)
-    element_size = np.dtype(np.int16).itemsize
-    if buffer_size % element_size != 0:
-        audio = audio + b"\0" * (element_size - (buffer_size % element_size))
-    return audio
 
 
 def generate_voice(history):

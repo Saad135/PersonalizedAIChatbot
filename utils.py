@@ -91,3 +91,13 @@ def load_embeddings(fname: str):
         (r.source, r.timestamp): [r[str(i)] for i in range(max_dim + 1)]
         for _, r in df.iterrows()
     }
+
+
+# Reference: https://huggingface.co/spaces/elevenlabs/tts/blob/main/app.py
+def pad_buffer(audio):
+    # Pad buffer to multiple of 2 bytes
+    buffer_size = len(audio)
+    element_size = np.dtype(np.int16).itemsize
+    if buffer_size % element_size != 0:
+        audio = audio + b"\0" * (element_size - (buffer_size % element_size))
+    return audio
