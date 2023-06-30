@@ -1,5 +1,6 @@
 import openai
 import os
+import copy
 import numpy as np
 import pandas as pd
 
@@ -155,7 +156,7 @@ def get_transcripts(video_ids, progress):
     transcripts = {}
     for video_id in progress.tqdm(video_ids, desc="Downloading transcripts"):
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["en"])
             transcripts[video_id] = transcript
         except Exception as ex:
             print(f"An error occurred for video: {video_id} [{ex}]")
@@ -168,6 +169,7 @@ def merge_transcripts(transcripts, progress):
 
     merged_item = reset_merged_item()
     merged_transcript = []
+    merged_transcript_wo_embed = []
     # all_transcripts = []
 
     # embeddings = {}
@@ -180,12 +182,11 @@ def merge_transcripts(transcripts, progress):
         ):
             merged_item["source"] = (key, item["start"])
             merged_item["text"] += item["text"].replace("\n", " ")
-            merged_item["start"] = (
-                item["start"] if merged_item["start"] != None else None
-            )
+            merged_item["start"] = item["start"]
             merged_item["duration"] += item["duration"]
 
             if merged_item["duration"] > 30.00:
+                merged_transcript_wo_embed += [copy.copy(merged_item)]
                 merged_item["embedding"] = get_doc_embedding(merged_item["text"])
                 merged_transcript += [merged_item]
                 merged_item = reset_merged_item()
@@ -193,4 +194,4 @@ def merge_transcripts(transcripts, progress):
         # all_transcripts += [merged_transcript]
         # merged_transcript = []
 
-    return merged_transcript
+    return merged_transcript, merged_transcript_wo_embed

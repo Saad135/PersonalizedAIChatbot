@@ -95,8 +95,12 @@ def generate_voice(history):
 def convert_to_embeddings(playlist_id, num_vids, pr=gr.Progress()):
     video_ids = get_channel_videos(playlist_id, num_vids)
     transcripts = get_transcripts(video_ids, pr)
-    merged_transcripts = merge_transcripts(transcripts, pr)
-    return "Embeddings generated successfully", merged_transcripts
+    merged_transcripts, merged_transcript_wo_embed = merge_transcripts(transcripts, pr)
+    return (
+        "Embeddings generated successfully",
+        merged_transcripts,
+        merged_transcript_wo_embed,
+    )
 
 
 # Without microphone streaming
@@ -117,12 +121,6 @@ with gr.Blocks() as demo:
     )
     convert_to_embeddings_btn = gr.Button("Convert")
     context_embeddings_state = gr.State()
-
-    convert_to_embeddings_btn.click(
-        convert_to_embeddings,
-        [playlist_id, num_videos],
-        [playlist_id, context_embeddings_state],
-    )
 
     gr.Markdown(
         """
@@ -154,10 +152,23 @@ with gr.Blocks() as demo:
     response.then(generate_voice, chatbot, bot_tts, queue=False)
     response.then(lambda: gr.update(interactive=True), None, [msg], queue=False)
 
+    gr.Markdown(
+        """
+        ## Retrieved Transcripts
+        """
+    )
+
+    embedding_json = gr.JSON()
+    convert_to_embeddings_btn.click(
+        convert_to_embeddings,
+        [playlist_id, num_videos],
+        [playlist_id, context_embeddings_state, embedding_json],
+    )
+
     clear.click(
         lambda: [None, None, None, None, None],
         None,
-        [record, chatbot, bot_tts, playlist_id, context_embeddings_state],
+        [record, chatbot, bot_tts, playlist_id, embedding_json],
         queue=False,
     )
 
